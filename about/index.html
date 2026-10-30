@@ -9,7 +9,9 @@
 :root{--stone:#ECEBE7;--char:#2F302C;--green:#1F3A2B;--gline:#3E5C49;--gold:#D9A441;--cream:#F5F1E8;--soft:#DCE6DC}
 *{box-sizing:border-box}body{margin:0;background:var(--stone);color:var(--char);font-family:'Inter',system-ui,sans-serif;line-height:1.6;font-size:16px}
 a{color:var(--green)}
-header.top{background:var(--green);text-align:center;padding:20px 16px 12px;border-bottom:3px solid var(--gold)}
+header.top{background:var(--green);text-align:center;padding:18px 16px 12px;border-bottom:3px solid var(--gold)}
+.logo{display:inline-block;border-radius:50%;line-height:0;box-shadow:0 0 0 3px var(--gold),0 6px 18px rgba(0,0,0,.25)}.logo img{width:132px;height:132px;border-radius:50%;display:block}
+@media(max-width:420px){.logo img{width:108px;height:108px}}
 .mark{font-family:'Inter',sans-serif;font-weight:900;font-size:26px;letter-spacing:.08em;margin:0;text-decoration:none;color:var(--cream);display:inline-block;line-height:1.1}
 .mark small{display:block;font-weight:600;font-size:10.5px;letter-spacing:.26em;margin-top:6px;text-transform:uppercase;color:var(--gold)}
 nav{display:flex;flex-wrap:wrap;justify-content:center;gap:4px 18px;padding:12px 8px 0;font-size:11.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase}
@@ -37,7 +39,7 @@ video{width:100%;max-width:360px;display:block;margin:14px auto;border-radius:12
 .signup{display:flex;flex-direction:column;gap:8px;max-width:440px;margin:6px auto 18px;background:var(--cream);border:2px solid var(--green);border-radius:12px;padding:14px}.signup b{font-weight:900;font-size:16px;text-transform:uppercase;letter-spacing:.06em;color:var(--green)}.signup span{font-size:12.5px}.signup input{padding:12px;border:1px solid #c9c6bd;border-radius:8px;font:inherit;background:#fff}.signup button{padding:13px;border:0;border-radius:8px;background:var(--gold);color:var(--green);font:inherit;font-weight:800;letter-spacing:.08em;text-transform:uppercase;cursor:pointer}.signup small{min-height:1em;font-size:12px}
 footer{background:var(--green);color:var(--soft);text-align:center;font-size:11.5px;letter-spacing:.05em;padding:16px 16px 30px;border-top:3px solid var(--gold)}
 </style><script type="application/ld+json">{"@context": "https://schema.org", "@type": "Organization", "name": "Artisan by Robert", "url": "https://artisanbyrobert.github.io/website", "description": "Luxury wild British game charcuterie, cured by hand in Hampshire: venison prosciutto, Ducatello and game salami.", "sameAs": ["https://www.instagram.com/artisanbyrobert/", "https://www.youtube.com/@artisanbyrobert"], "address": {"@type": "PostalAddress", "addressRegion": "Hampshire", "addressCountry": "GB"}}</script></head><body>
-<header class="top"><a class="mark" href="../">ARTISAN BY ROBERT<small>Luxury wild British game charcuterie</small></a>
+<header class="top"><a class="logo" href="../"><img src="../img/logo-circle.png" width="132" height="132" alt="Artisan by Robert - luxury wild British game charcuterie"></a>
 <nav><a href="../venison-prosciutto/">Venison prosciutto</a><a href="../ducatello/">Ducatello</a><a href="../game-salami/">Game salami</a><a href="../for-estates/">For estates</a><a href="../curing-room/">This week</a><a href="../about/">About</a></nav></header>
 <main><h1>About <em>Robert</em></h1><p class="lede">A chef's training, a lifetime of the highest standards, and now wild British game.</p>
 <p>After school Robert studied at Westminster Catering College and Hendon Polytechnic, then headed to Ecole Les Roches in the Swiss Alps, where he was best in his year for butchery, first out of 300. He went on to work in Montreux and Zurich, and spent two years in the Cathay Pacific catering kitchens in Hong Kong.</p>
