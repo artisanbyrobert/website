@@ -1,0 +1,76 @@
+<!doctype html>
+<!--
+CONTRACT - voice recorder (private, not linked anywhere, noindex)
+What: shows Robert one line at a time in big text with a big Record button. Tap to record, tap to stop;
+      the take uploads straight to Supabase (edge function voice-drop -> private bucket 'voice', table voice_takes).
+Key:  the shared secret travels in the URL hash (#k=...), never in the page source.
+Success: each line saved, "Saved" shown, next line appears.
+-->
+<html lang="en-GB"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Voice lines · Artisan by Robert</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--green:#1F3A2B;--cream:#F5F1E8;--gold:#D9A441;--soft:#DCE6DC;--red:#C0392B}
+*{box-sizing:border-box}html,body{height:100%}
+body{margin:0;background:var(--green);color:var(--cream);font-family:Inter,system-ui,sans-serif;
+ padding:max(14px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(18px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left));
+ display:flex;flex-direction:column;gap:14px}
+.top{display:flex;justify-content:space-between;font-size:15px;letter-spacing:.14em;text-transform:uppercase;color:var(--gold);font-weight:800}
+.line{flex:1;display:flex;align-items:center;font-size:clamp(28px,8.2vw,60px);line-height:1.22;font-weight:800;min-height:0;overflow:auto}
+.status{min-height:1.4em;font-size:18px;font-weight:700;color:var(--soft);text-align:center}
+.rec{align-self:center;width:150px;height:150px;border-radius:50%;border:6px solid var(--cream);background:var(--red);color:#fff;font:inherit;font-size:22px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;cursor:pointer}
+.rec.on{background:#fff;color:var(--red);animation:pulse 1s infinite}
+@keyframes pulse{50%{transform:scale(1.05)}}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.row button{font:inherit;font-size:19px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;border-radius:12px;padding:16px 8px;border:2px solid var(--soft);background:transparent;color:var(--cream);cursor:pointer}
+button:disabled{opacity:.35}
+</style></head><body>
+<div class="top"><span id="count">Line 1 of 5</span><span>Say it twice</span></div>
+<div class="line" id="line"></div>
+<div class="status" id="status">Tap the red button, read the line, tap again to stop.</div>
+<button class="rec" id="rec" type="button">Record</button>
+<div class="row"><button id="back" type="button">Back</button><button id="next" type="button">Skip</button></div>
+<script>
+const LINES=[
+ "What is Prosciutto di Cervo? It's air-dried venison ham, made the way Parma ham is made, from the haunch of wild British deer.",
+ "What is Ducatello? Wild mallard, cured slowly, like prosciutto. Six months for one slice.",
+ "How long does it take? A small muntjac haunch, about five weeks. A big fallow haunch, up to six months.",
+ "Why no nitrates? I take the bone out before it cures, so it simply doesn't need them.",
+ "I'm Robert. I cure wild British game by hand, in Hampshire. Follow along for the next one."
+];
+const KEY=(new URLSearchParams(location.hash.slice(1))).get('k')||'';
+const URL_='https://rgmstzswgosoelvamgds.supabase.co/functions/v1/voice-drop';
+let i=0, rec=null, chunks=[], stream=null;
+const $=id=>document.getElementById(id);
+function show(){ $('line').textContent=LINES[i]; $('count').textContent='Line '+(i+1)+' of '+LINES.length; $('back').disabled=i===0; $('next').textContent=i===LINES.length-1?'Finish':'Skip'; }
+function pickType(){ for(const t of ['audio/mp4','audio/webm;codecs=opus','audio/webm']) if(window.MediaRecorder&&MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(t)) return t; return ''; }
+async function start(){
+  if(!KEY){ $('status').textContent='This link is missing its key. Ask Claude for the link again.'; return; }
+  try{ stream = stream || await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:true}}); }
+  catch(e){ $('status').textContent='Microphone blocked. Tap Allow when your phone asks, or allow the microphone for this site in Settings.'; return; }
+  const type=pickType(); chunks=[];
+  rec=new MediaRecorder(stream, type?{mimeType:type}:undefined);
+  rec.ondataavailable=e=>{ if(e.data&&e.data.size) chunks.push(e.data); };
+  rec.onstop=upload;
+  rec.start(); $('rec').classList.add('on'); $('rec').textContent='Stop'; $('status').textContent='Recording… read the line, then tap Stop.';
+}
+function stop(){ if(rec&&rec.state==='recording'){ rec.stop(); } $('rec').classList.remove('on'); $('rec').textContent='Record'; }
+async function upload(){
+  const blob=new Blob(chunks,{type:(rec&&rec.mimeType)||'audio/mp4'});
+  $('status').textContent='Saving…'; $('rec').disabled=true;
+  try{
+    const r=await fetch(URL_+'?k='+encodeURIComponent(KEY)+'&line='+(i+1)+'&text='+encodeURIComponent(LINES[i].slice(0,200)),{method:'POST',headers:{'content-type':blob.type.split(';')[0]},body:blob});
+    const j=await r.json();
+    if(j.ok){ $('status').textContent='Saved ✓  Line '+(i+1)+' is with Claude.'; if(i<LINES.length-1){ i++; setTimeout(()=>{show(); $('status').textContent='Next line. Tap Record when ready.';},1200);} else { setTimeout(()=>{$('line').textContent='All done. Thank you. Claude will clean them up and send them back for you to approve.'; $('status').textContent='';},1200);} }
+    else { $('status').textContent='Not saved ('+(j.error||r.status)+'). Tap Record to try again.'; }
+  }catch(e){ $('status').textContent='No signal? Not saved. Tap Record to try again.'; }
+  $('rec').disabled=false;
+}
+$('rec').onclick=()=>{ (rec&&rec.state==='recording')?stop():start(); };
+$('next').onclick=()=>{ if(i<LINES.length-1){i++;show();} else { $('line').textContent='Finished. You can close this page.'; } };
+$('back').onclick=()=>{ if(i>0){i--;show();} };
+show();
+</script>
+</body></html>
