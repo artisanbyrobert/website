@@ -49,11 +49,11 @@ const URL_='https://rgmstzswgosoelvamgds.supabase.co/functions/v1/voice-drop';
 const $=id=>document.getElementById(id), v=$('v');
 let take=0, stream=null, timer=null;
 function pickType(){ for(const x of ['audio/mp4','audio/webm;codecs=opus','audio/webm']) if(window.MediaRecorder&&MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(x)) return x; return ''; }
-function preview(){ $('cue').textContent=CUES[0][1]; $('next').textContent='then: '+CUES[1][1]; }
+function preview(){ $('cue').textContent=CUES[0][1]; $('next').textContent=CUES[1][1]; }
 function tick(){
   const t=v.currentTime; let cur='', nxt='';
-  for(let i=0;i<CUES.length;i++){ if(t>=CUES[i][0]-0.15){ cur=CUES[i][1]; nxt=CUES[i+1]?('then: '+CUES[i+1][1]):''; } }
-  if(t<CUES[0][0]-0.15){ cur=''; nxt='get ready: '+CUES[0][1]; }
+  for(let i=0;i<CUES.length;i++){ if(t>=CUES[i][0]-0.15){ cur=CUES[i][1]; nxt=CUES[i+1]?(CUES[i+1][1]):''; } }
+  if(t<CUES[0][0]-0.15){ cur=''; nxt=CUES[0][1]; }
   $('cue').textContent=cur; $('next').textContent=nxt;
 }
 let looping=false;
