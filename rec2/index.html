@@ -1,0 +1,82 @@
+<!doctype html>
+<!--
+CONTRACT - voice recorder, SYNC mode (private, noindex)
+What: plays the roe reel (silent) full screen with the words appearing at the right moment, like karaoke.
+      A 3-2-1 countdown, then video + recording start together; recording stops by itself at the end.
+      Each take uploads to Supabase voice-drop (private bucket 'voice', table voice_takes, label "sync-<script> | take N").
+Scripts: ?s=A (default) Day one / Months later / Prosciutto di Cervo / Salt, time and air.
+         ?s=B Day one / Months later / Salt, time and air / Follow for the next one.
+Key: in the URL hash (#k=...).
+-->
+<html lang="en-GB"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Voice sync · Artisan by Robert</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@600;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--green:#1F3A2B;--cream:#F5F1E8;--gold:#D9A441;--red:#C0392B}
+*{box-sizing:border-box}html,body{height:100%;margin:0;background:#000;color:var(--cream);font-family:Inter,system-ui,sans-serif}
+.stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#000}
+video{height:100%;max-width:100%;object-fit:contain}
+.cue{position:fixed;left:0;right:0;top:38%;text-align:center;padding:0 18px;font-size:clamp(40px,12vw,80px);font-weight:900;line-height:1.08;
+ text-shadow:0 3px 18px rgba(0,0,0,.9),0 0 4px #000;color:#fff}
+.next{position:fixed;left:0;right:0;top:56%;text-align:center;font-size:clamp(18px,5vw,30px);font-weight:700;color:var(--gold);text-shadow:0 2px 10px #000}
+.count{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-size:30vw;font-weight:900;color:var(--gold);text-shadow:0 4px 30px #000;pointer-events:none}
+.bar{position:fixed;left:0;right:0;bottom:0;padding:14px max(16px,env(safe-area-inset-left)) max(18px,env(safe-area-inset-bottom));background:linear-gradient(transparent,rgba(0,0,0,.85));display:flex;flex-direction:column;gap:10px;align-items:center}
+.status{font-size:17px;font-weight:700;text-align:center;min-height:1.3em}
+.btn{font:inherit;font-size:22px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;border:4px solid var(--cream);border-radius:999px;background:var(--red);color:#fff;padding:18px 34px;cursor:pointer}
+.btn:disabled{opacity:.4}
+.tips{font-size:15px;color:#ddd;text-align:center;line-height:1.35}
+</style></head><body>
+<div class="stage"><video id="v" src="https://rgmstzswgosoelvamgds.supabase.co/storage/v1/object/public/ig-media/2026-10-30/trial-roe-R01.mp4" muted playsinline preload="auto"></video></div>
+<div class="cue" id="cue"></div><div class="next" id="next"></div>
+<div class="count" id="count"></div>
+<div class="bar">
+ <div class="tips" id="tips">Lower and slower than normal. Finish every word. Speak to someone across the room.</div>
+ <div class="status" id="status">Tap Start. 3, 2, 1, then read the words as they appear.</div>
+ <button class="btn" id="go" type="button">Start take 1</button>
+</div>
+<script>
+const SCRIPTS={
+ A:[[0.3,'Day one.'],[1.5,'Months later.'],[2.7,'Prosciutto di Cervo.'],[4.9,'Salt, time and air.']],
+ B:[[0.3,'Day one.'],[1.5,'Months later.'],[2.8,'Salt, time and air.'],[5.9,'Follow for the next one.']]
+};
+const S=(new URLSearchParams(location.search)).get('s')==='B'?'B':'A', CUES=SCRIPTS[S], LEN=8.0;
+const KEY=(new URLSearchParams(location.hash.slice(1))).get('k')||'';
+const URL_='https://rgmstzswgosoelvamgds.supabase.co/functions/v1/voice-drop';
+const $=id=>document.getElementById(id), v=$('v');
+let take=0, stream=null, rec=null, chunks=[], timer=null;
+function pickType(){ for(const x of ['audio/mp4','audio/webm;codecs=opus','audio/webm']) if(window.MediaRecorder&&MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(x)) return x; return ''; }
+function preview(){ $('cue').textContent=CUES[0][1]; $('next').textContent='then: '+CUES[1][1]; }
+function tick(){
+  const t=v.currentTime; let cur='', nxt='';
+  for(let i=0;i<CUES.length;i++){ if(t>=CUES[i][0]-0.15){ cur=CUES[i][1]; nxt=CUES[i+1]?('then: '+CUES[i+1][1]):''; } }
+  if(t<CUES[0][0]-0.15){ cur=''; nxt='get ready: '+CUES[0][1]; }
+  $('cue').textContent=cur; $('next').textContent=nxt;
+}
+async function go(){
+  if(!KEY){ $('status').textContent='Link is missing its key. Ask Claude for the link again.'; return; }
+  try{ stream=stream||await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:true}}); }
+  catch(e){ $('status').textContent='Microphone blocked. Open this link in Chrome and tap Allow.'; return; }
+  $('go').disabled=true; v.pause(); v.currentTime=0; $('cue').textContent=''; $('next').textContent='';
+  for(const n of [3,2,1]){ $('count').textContent=n; await new Promise(r=>setTimeout(r,800)); }
+  $('count').textContent='';
+  const type=pickType(); chunks=[]; rec=new MediaRecorder(stream,type?{mimeType:type}:undefined);
+  rec.ondataavailable=e=>{ if(e.data&&e.data.size) chunks.push(e.data); }; rec.onstop=upload;
+  rec.start(); await v.play().catch(()=>{}); $('status').textContent='Recording…';
+  timer=setInterval(tick,50);
+  setTimeout(()=>{ clearInterval(timer); v.pause(); if(rec.state==='recording') rec.stop(); },(LEN+0.4)*1000);
+}
+async function upload(){
+  $('status').textContent='Saving…'; const blob=new Blob(chunks,{type:(rec&&rec.mimeType)||'audio/mp4'});
+  try{
+    const r=await fetch(URL_+'?k='+encodeURIComponent(KEY)+'&line=100&text='+encodeURIComponent('sync-'+S+' | take '+(take+1)+' | '+CUES.map(c=>c[1]).join(' / ')),{method:'POST',headers:{'content-type':blob.type.split(';')[0]},body:blob});
+    const j=await r.json();
+    if(j.ok){ take++; $('status').textContent='Saved ✓ take '+take+'. Do 3 to 5 takes, then tell Claude.'; }
+    else $('status').textContent='Not saved ('+(j.error||r.status)+'). Try again.';
+  }catch(e){ $('status').textContent='No signal? Not saved. Try again.'; }
+  $('go').disabled=false; $('go').textContent='Start take '+(take+1); preview();
+}
+$('go').onclick=go; preview();
+</script>
+</body></html>
