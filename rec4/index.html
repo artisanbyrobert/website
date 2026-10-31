@@ -1,0 +1,74 @@
+<!doctype html>
+<!--
+CONTRACT - voice recorder, SYNC mode (private, noindex)
+What: plays the roe reel (silent) full screen with the words appearing at the right moment, like karaoke.
+      A 3-2-1 countdown, then video + recording start together; recording stops by itself at the end. LOOP: after each take it waits 2 s and goes again, until Robert taps Stop take.
+      Each take uploads to Supabase voice-drop (private bucket 'voice', table voice_takes, label "sync-<script> | take N").
+Scripts: ?s=A (default) Day one / Months later / Prosciutto di Cervo / Salt, time and air.
+         ?s=B Day one / Months later / Salt, time and air / Follow for the next one.
+Key: in the URL hash (#k=...).
+-->
+<html lang="en-GB"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Voice ramble · Artisan by Robert</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@600;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--green:#1F3A2B;--cream:#F5F1E8;--gold:#D9A441;--red:#C0392B}
+*{box-sizing:border-box}html,body{height:100%;margin:0;background:#000;color:var(--cream);font-family:Inter,system-ui,sans-serif}
+.stage{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#000}
+video{height:100%;max-width:100%;object-fit:contain}
+.cue{position:fixed;left:0;right:0;top:30%;text-align:center;padding:0 18px;font-size:clamp(30px,9vw,60px);font-weight:900;line-height:1.08;
+ text-shadow:0 3px 18px rgba(0,0,0,.9),0 0 4px #000;color:#fff}
+.next{position:fixed;left:0;right:0;top:56%;text-align:center;font-size:clamp(18px,5vw,30px);font-weight:700;color:var(--gold);text-shadow:0 2px 10px #000}
+.count{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-size:30vw;font-weight:900;color:var(--gold);text-shadow:0 4px 30px #000;pointer-events:none}
+.bar{position:fixed;left:0;right:0;bottom:0;padding:14px max(16px,env(safe-area-inset-left)) max(18px,env(safe-area-inset-bottom));background:linear-gradient(transparent,rgba(0,0,0,.85));display:flex;flex-direction:column;gap:10px;align-items:center}
+.status{font-size:17px;font-weight:700;text-align:center;min-height:1.3em}
+.btn{font:inherit;font-size:22px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;border:4px solid var(--cream);border-radius:999px;background:var(--red);color:#fff;padding:18px 34px;cursor:pointer}
+.btn:disabled{opacity:.4}
+.tips{font-size:15px;color:#ddd;text-align:center;line-height:1.35}
+</style></head><body>
+<div class="stage"><video id="v" loop src="https://rgmstzswgosoelvamgds.supabase.co/storage/v1/object/public/ig-media/2026-10-30/trial-roe-R01.mp4" muted playsinline preload="auto"></video></div>
+<div class="cue" id="cue"></div><div class="next" id="next"></div>
+<div class="count" id="count"></div>
+<div class="bar">
+ <div class="tips" id="tips">No script. Just talk about it like you would to a customer at the market. The words are only reminders.</div>
+ <div class="status" id="status">Tap Start. Talk for 20 to 40 seconds, then tap Stop.</div>
+ <button class="btn" id="go" type="button">Start</button>
+ <button class="btn" id="stop" type="button" style="display:none;background:#1F3A2B">Stop take</button>
+ <a id="sw" style="color:#D9A441;font-weight:700;font-size:16px"></a>
+</div>
+<script>
+// CONTRACT: ramble recorder. Roe reel loops silently; prompt words fade through every 4 s as reminders only.
+// Each take: Start -> 3-2-1 -> record until Stop (auto-stop at 60 s) -> upload to voice-drop as "ramble | take N".
+const WORDS=['Day one','Wild roe deer','The haunch','Salt','Weeks in the cure','Hanging in the curing room','Months later','Prosciutto di Cervo','Salt, time and air','What it tastes like','Follow for the next one'];
+const KEY=(new URLSearchParams(location.hash.slice(1))).get('k')||'';
+const URL_='https://rgmstzswgosoelvamgds.supabase.co/functions/v1/voice-drop';
+const $=id=>document.getElementById(id), v=$('v'), sleep=ms=>new Promise(r=>setTimeout(r,ms));
+let take=0, stream=null, r=null, wt=null, st=null, t0=0;
+function pickType(){ for(const x of ['audio/mp4','audio/webm;codecs=opus','audio/webm']) if(window.MediaRecorder&&MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(x)) return x; return ''; }
+function idle(){ $('cue').textContent='Ramble'; $('next').textContent=WORDS.slice(0,4).join(' · ')+' …'; }
+async function go(){
+  if(!KEY){ $('status').textContent='Link is missing its key. Ask Claude for the link again.'; return; }
+  try{ stream=stream||await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:true}}); }
+  catch(e){ $('status').textContent='Microphone blocked. Open this link in Chrome and tap Allow.'; return; }
+  $('go').style.display='none'; $('sw').style.display='none'; $('cue').textContent=''; $('next').textContent='';
+  for(const n of [3,2,1]){ $('count').textContent=n; await sleep(800); } $('count').textContent='';
+  const type=pickType(), ch=[]; r=new MediaRecorder(stream,type?{mimeType:type}:undefined);
+  r.ondataavailable=e=>{ if(e.data&&e.data.size) ch.push(e.data); };
+  r.onstop=()=>upload(new Blob(ch,{type:r.mimeType||'audio/mp4'}), ++take);
+  r.start(); v.currentTime=0; v.play().catch(()=>{}); t0=Date.now(); $('stop').style.display='';
+  let i=0; const show=()=>{ $('cue').textContent=WORDS[i%WORDS.length]; $('next').textContent=WORDS[(i+1)%WORDS.length]; i++; }; show(); wt=setInterval(show,4000);
+  st=setInterval(()=>{ const s=Math.round((Date.now()-t0)/1000); $('status').textContent='Recording… '+s+' s'; if(s>=60) stop(); },250);
+}
+function stop(){ clearInterval(wt); clearInterval(st); v.pause(); if(r&&r.state==='recording') r.stop(); $('stop').style.display='none'; $('status').textContent='Saving…'; }
+async function upload(blob,n){
+  try{
+    const res=await fetch(URL_+'?k='+encodeURIComponent(KEY)+'&line=200&text='+encodeURIComponent('ramble | take '+n+' | roe'),{method:'POST',headers:{'content-type':blob.type.split(';')[0]},body:blob});
+    const j=await res.json(); $('status').textContent=j.ok?('Saved ✓ take '+n+'. Another, or tell Claude you are done.'):('Not saved ('+(j.error||res.status)+').');
+  }catch(e){ $('status').textContent='Take '+n+' not saved (no signal?).'; }
+  $('go').style.display=''; $('go').textContent='Start take '+(take+1); idle();
+}
+$('go').onclick=go; $('stop').onclick=stop; $('sw').style.display='none'; idle();
+</script>
+</body></html>
