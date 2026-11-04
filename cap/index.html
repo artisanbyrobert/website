@@ -209,7 +209,7 @@ $('bScripts').onclick=loadScripts;
 $('listClose').onclick=()=>{$('list').style.display='none';};
 $('scrX').onclick=()=>{$('scr').style.display='none'; scriptOn=false; $('note').value='';};
 window.addEventListener('beforeunload',ev=>{ if(pending()){ ev.preventDefault(); ev.returnValue=''; } });
-(async()=>{ try{ const t=await navigator.mediaDevices.getUserMedia({audio:true}); t.getTracks().forEach(x=>x.stop()); }catch(e){} await listMics(); camera().catch(()=>{}); })();
+(async()=>{ try{ const t=await navigator.mediaDevices.getUserMedia({audio:true}); t.getTracks().forEach(x=>x.stop()); }catch(e){} await listMics(); try{ const d=(await navigator.mediaDevices.enumerateDevices()).filter(x=>x.kind==='audioinput'); fetch(URL_+'?k='+encodeURIComponent(KEY)+'&diag='+encodeURIComponent(('load v7 mics='+d.length+' '+d.map(x=>x.label||'(no label)').join(' / ')+' | '+navigator.userAgent).slice(0,480))); }catch(e){} camera().catch(()=>{}); })();
 $('mic').onfocus=listMics;
 $('mic').onchange=()=>{ try{localStorage.setItem('cap_mic',$('mic').value);}catch(e){} };
 navigator.mediaDevices&&navigator.mediaDevices.addEventListener&&navigator.mediaDevices.addEventListener('devicechange',listMics);
