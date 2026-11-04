@@ -36,6 +36,7 @@ video{width:100%;height:100%;object-fit:cover}
 .status{font-size:17px;font-weight:800;text-align:center;min-height:1.3em;background:rgba(0,0,0,.75);border-radius:12px;padding:8px 10px}
 .voiceonly{position:fixed;inset:0;display:none;align-items:center;justify-content:center;font-size:26px;font-weight:900;color:#fff;background:#1F3A2B;text-align:center;padding:24px}
 input[type=file]{display:none}
+/* v5 */
 .scr{position:fixed;left:14px;right:14px;top:130px;max-height:calc(100% - 470px);overflow:auto;background:rgba(0,0,0,.72);border-radius:16px;padding:40px 16px 16px;font-size:clamp(20px,5.6vw,30px);font-weight:800;line-height:1.25;color:#fff;display:none;z-index:5}
 .scr div{margin:0 0 14px}
 .scr .x{position:absolute;right:10px;top:6px;font-size:22px;color:#ccc;background:none;border:0;padding:6px}
@@ -64,7 +65,9 @@ input[type=file]{display:none}
     <button class="btn small" id="bPick" type="button">⬆ Upload</button>
     <button class="btn small" id="bScripts" type="button">📜 Scripts</button>
   </div>
+  <button class="btn small" id="bNative" type="button" style="display:none">📱 Use iPhone camera (records, then uploads)</button>
   <input type="file" id="pick" accept="video/*,image/*,audio/*" multiple>
+  <input type="file" id="nat" accept="video/*" capture="environment">
 </div>
 <script>
 let KEY=(new URLSearchParams(location.hash.slice(1))).get('k')||'';
@@ -98,7 +101,8 @@ async function start(k){
   try{
     if(k==='video'){ await camera(); $('vo').style.display='none'; }
     else { if(stream) stream.getTracks().forEach(t=>t.stop()); stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:true}}); v.srcObject=null; $('vo').style.display= scriptOn?'none':'flex'; }
-  }catch(e){ setStatus('Camera or microphone blocked ('+(e&&e.name||'error')+'). On iPhone: Settings > Apps > Safari > Camera and Microphone > Ask, then reopen Capture and tap Allow.'); return; }
+  }catch(e){ const nm=(e&&e.name||'error'); try{ fetch(URL_+'?k='+encodeURIComponent(KEY)+'&diag='+encodeURIComponent(nm+'|'+(e&&e.message||'')+'|standalone='+(navigator.standalone?1:0)+'|'+navigator.userAgent).slice(0,600)); }catch(_){}
+      setStatus('Camera or microphone blocked ('+nm+'). Tap "Use iPhone camera" below, or open Capture in Safari.'); $('bNative').style.display=''; return; }
   const type=pickType(k==='video');
   const opts=type?{mimeType:type}:{}; if(k==='video') opts.videoBitsPerSecond=6000000; opts.audioBitsPerSecond=128000;
   try{ rec=new MediaRecorder(stream,opts); }catch(e){ rec=new MediaRecorder(stream); }
@@ -153,6 +157,8 @@ $('bVoice').onclick=()=>start('voice');
 $('bStop').onclick=stop;
 $('bFlip').onclick=async()=>{ facing= facing==='environment'?'user':'environment'; try{ await camera(); setStatus(facing==='user'?'Front camera':'Back camera'); }catch(e){ setStatus('Could not switch camera.'); } };
 $('bPick').onclick=()=>$('pick').click();
+$('bNative').onclick=()=>$('nat').click();
+$('nat').onchange=e=>{ const f=e.target.files[0]; if(!f) return; if(f.size>45000000){ alertMsg({name:f.name}); return; } queue.push({blob:f, sess:sid(), part:1, kind:'upload', note:$('note').value.trim(), name:f.name}); e.target.value=''; showQueue(); pump(); };
 $('pick').onchange=e=>{
   const files=[...e.target.files]; if(!files.length) return;
   const s=sid(); let n=0;
