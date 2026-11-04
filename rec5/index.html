@@ -22,7 +22,7 @@ video{height:100%;max-width:100%;object-fit:contain;filter:brightness(.35) blur(
  text-shadow:0 3px 18px rgba(0,0,0,.9),0 0 4px #000;color:#fff}
 .next{position:fixed;left:14px;right:14px;top:72%;background:rgba(0,0,0,.6);border-radius:14px;padding:12px 14px;text-align:center;font-size:clamp(16px,4.5vw,24px);font-weight:700;color:var(--gold);text-shadow:0 2px 10px #000}
 .count{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-size:30vw;font-weight:900;color:var(--gold);text-shadow:0 4px 30px #000;pointer-events:none}
-.bar{position:fixed;left:0;right:0;bottom:0;padding:14px max(16px,env(safe-area-inset-left)) max(18px,env(safe-area-inset-bottom));background:linear-gradient(transparent,rgba(0,0,0,.85));display:flex;flex-direction:column;gap:10px;align-items:center}
+.bar{position:fixed;left:0;right:0;bottom:0;padding:14px max(16px,env(safe-area-inset-left)) max(70px,env(safe-area-inset-bottom));background:linear-gradient(transparent,rgba(0,0,0,.85));display:flex;flex-direction:column;gap:10px;align-items:center}
 .status{font-size:17px;font-weight:700;text-align:center;min-height:1.3em}
 .btn{font:inherit;font-size:22px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;border:4px solid var(--cream);border-radius:999px;background:var(--red);color:#fff;padding:18px 34px;cursor:pointer}
 .btn:disabled{opacity:.4}
@@ -35,7 +35,7 @@ video{height:100%;max-width:100%;object-fit:contain;filter:brightness(.35) blur(
  <div class="tips" id="tips">Goose call-out. Read at your own pace; your own words are fine.</div>
  <div class="status" id="status">Tap Start, read the lines, then tap Stop take.</div>
  <button class="btn" id="go" type="button">Start</button>
- <button class="btn" id="stop" type="button" style="display:none;background:#1F3A2B">Stop take</button>
+ <button class="btn" id="stop" type="button" style="display:none;background:#C0392B">■ Stop take</button>
  <a id="sw" style="color:#D9A441;font-weight:700;font-size:16px"></a>
 </div>
 <script>
