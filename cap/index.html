@@ -1,0 +1,151 @@
+<!doctype html>
+<!--
+CONTRACT - field capture (private, noindex)
+What: Robert records VIDEO + VOICE, or VOICE ONLY, straight from his phone while working, or uploads clips/photos from his camera roll.
+      Recording uploads in parts every ~15 s while it records (so a long chat never hits the size limit and little is lost if signal drops).
+      Parts go to Supabase function voice-drop v3 (?cap=<session>&part=<n>&kind=video|voice|upload) -> private bucket 'voice' capture/YYYY-MM-DD/<session>-pNNN.<ext>, rows in voice_takes (line_no 300).
+      Failed parts stay in memory and retry every 8 s. The screen is kept awake while recording.
+Key: in the URL hash (#k=...). Max 45 MB per upload (camera-roll files bigger than that are refused with a message).
+-->
+<html lang="en-GB"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Field capture · Artisan by Robert</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@600;800;900&display=swap" rel="stylesheet">
+<style>
+:root{--green:#1F3A2B;--cream:#F5F1E8;--stone:#ECEBE7;--red:#C0392B;--ink:#2F302C}
+*{box-sizing:border-box}html,body{height:100%;margin:0;background:#111;color:var(--cream);font-family:Inter,system-ui,sans-serif}
+.view{position:fixed;inset:0;background:#000;display:flex;align-items:center;justify-content:center}
+video{width:100%;height:100%;object-fit:cover}
+.top{position:fixed;left:0;right:0;top:0;padding:max(14px,env(safe-area-inset-top)) 16px 12px;background:linear-gradient(rgba(0,0,0,.75),transparent);display:flex;flex-direction:column;gap:8px}
+.note{width:100%;font:inherit;font-size:17px;font-weight:600;border-radius:12px;border:2px solid rgba(255,255,255,.35);background:rgba(0,0,0,.45);color:#fff;padding:12px 14px}
+.note::placeholder{color:#ccc}
+.timer{font-size:22px;font-weight:900;text-align:center;min-height:1.2em}
+.timer.rec{color:#ff6b5e}
+.bar{position:fixed;left:0;right:0;bottom:0;padding:14px 16px max(60px,env(safe-area-inset-bottom));background:linear-gradient(transparent,rgba(0,0,0,.88));display:flex;flex-direction:column;gap:10px;align-items:stretch}
+.row{display:flex;gap:10px}
+.btn{flex:1;font:inherit;font-size:19px;font-weight:900;letter-spacing:.03em;border:3px solid var(--cream);border-radius:18px;background:var(--green);color:#fff;padding:18px 10px;cursor:pointer;text-align:center}
+.btn.rec{background:var(--red)}
+.btn.small{font-size:15px;padding:12px 8px;border-width:2px;background:rgba(0,0,0,.5)}
+.btn:disabled{opacity:.45}
+.status{font-size:16px;font-weight:700;text-align:center;min-height:1.3em}
+.voiceonly{position:fixed;inset:0;display:none;align-items:center;justify-content:center;font-size:26px;font-weight:900;color:#fff;background:#1F3A2B;text-align:center;padding:24px}
+input[type=file]{display:none}
+</style></head><body>
+<div class="view"><video id="v" playsinline muted autoplay></video></div>
+<div class="voiceonly" id="vo">🎙 Recording your voice<br>Keep talking</div>
+<div class="top">
+  <input class="note" id="note" placeholder="What is this? (optional, e.g. boning a fallow haunch)">
+  <div class="timer" id="timer"></div>
+</div>
+<div class="bar">
+  <div class="status" id="status">Tap a button to start.</div>
+  <div class="row">
+    <button class="btn" id="bVideo" type="button">● Video + voice</button>
+    <button class="btn" id="bVoice" type="button">🎙 Voice only</button>
+  </div>
+  <button class="btn rec" id="bStop" type="button" style="display:none">■ Stop and save</button>
+  <div class="row">
+    <button class="btn small" id="bFlip" type="button">↺ Front / back camera</button>
+    <button class="btn small" id="bPick" type="button">⬆ Upload from phone</button>
+  </div>
+  <input type="file" id="pick" accept="video/*,image/*,audio/*" multiple>
+</div>
+<script>
+const KEY=(new URLSearchParams(location.hash.slice(1))).get('k')||'';
+const URL_='https://rgmstzswgosoelvamgds.supabase.co/functions/v1/voice-drop';
+const $=id=>document.getElementById(id), v=$('v');
+let facing='environment', stream=null, rec=null, kind='', sess='', part=0, buf=[], bufBytes=0, t0=0, tick=null, flushT=null, lock=null;
+const queue=[]; let busy=false, savedParts=0;
+const PART_MS=15000;
+function sid(){ const d=new Date(); return d.toTimeString().slice(0,8).replace(/:/g,'')+'-'+Math.random().toString(36).slice(2,6); }
+function pickType(video){
+  const c= video ? ['video/mp4;codecs=avc1,mp4a','video/mp4','video/webm;codecs=vp9,opus','video/webm'] : ['audio/mp4','audio/webm;codecs=opus','audio/webm'];
+  for(const x of c) if(window.MediaRecorder&&MediaRecorder.isTypeSupported&&MediaRecorder.isTypeSupported(x)) return x; return '';
+}
+function setStatus(s){ $('status').textContent=s; }
+function pending(){ return queue.length+(busy?1:0); }
+function showQueue(){
+  if(rec&&rec.state==='recording') return;
+  if(pending()) setStatus('Saving… '+pending()+' part(s) left. Keep this page open.');
+  else if(savedParts) setStatus('All saved ✓ ('+savedParts+' part(s)). Record another, or close.');
+}
+async function camera(){
+  if(stream) stream.getTracks().forEach(t=>t.stop());
+  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:facing,width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}},audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:true}});
+  v.srcObject=stream; v.style.transform= facing==='user'?'scaleX(-1)':'none';
+}
+async function start(k){
+  if(!KEY){ setStatus('Link is missing its key. Ask Claude for the link again.'); return; }
+  kind=k;
+  try{
+    if(k==='video'){ await camera(); $('vo').style.display='none'; }
+    else { if(stream) stream.getTracks().forEach(t=>t.stop()); stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:true}}); v.srcObject=null; $('vo').style.display='flex'; }
+  }catch(e){ setStatus('Camera or microphone blocked. Open this link in Safari or Chrome and tap Allow.'); return; }
+  const type=pickType(k==='video');
+  const opts=type?{mimeType:type}:{}; if(k==='video') opts.videoBitsPerSecond=6000000; opts.audioBitsPerSecond=128000;
+  try{ rec=new MediaRecorder(stream,opts); }catch(e){ rec=new MediaRecorder(stream); }
+  sess=sid(); part=0; buf=[]; bufBytes=0;
+  rec.ondataavailable=e=>{ if(e.data&&e.data.size){ buf.push(e.data); bufBytes+=e.data.size; } };
+  rec.onstop=()=>{ setTimeout(()=>{ flush(true); },300); };
+  rec.start(1000);
+  t0=Date.now();
+  try{ lock=await navigator.wakeLock.request('screen'); }catch(e){}
+  $('bVideo').style.display='none'; $('bVoice').style.display='none'; $('bStop').style.display=''; $('bPick').disabled=true; $('bFlip').disabled=true;
+  $('timer').classList.add('rec');
+  tick=setInterval(()=>{ const s=Math.floor((Date.now()-t0)/1000); $('timer').textContent='● '+Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); setStatus(savedParts?('Recording… saved '+savedParts+' part(s) so far'):'Recording… talk as long as you like'); },500);
+  flushT=setInterval(()=>flush(false),PART_MS);
+}
+function flush(final){
+  if(!buf.length) { if(final) done(); return; }
+  const type=(rec&&rec.mimeType)||(kind==='video'?'video/mp4':'audio/mp4');
+  const blob=new Blob(buf,{type}); buf=[]; bufBytes=0; part++;
+  queue.push({blob, sess, part, kind, note:$('note').value.trim()});
+  pump();
+  if(final) done();
+}
+function done(){
+  clearInterval(tick); clearInterval(flushT);
+  try{ lock&&lock.release(); }catch(e){} lock=null;
+  $('timer').classList.remove('rec'); $('timer').textContent='';
+  $('bStop').style.display='none'; $('bVideo').style.display=''; $('bVoice').style.display=''; $('bPick').disabled=false; $('bFlip').disabled=false;
+  $('vo').style.display='none';
+  if(kind==='voice'&&stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+  showQueue();
+}
+function stop(){ if(rec&&rec.state==='recording'){ rec.requestData(); rec.stop(); } setStatus('Saving…'); }
+async function pump(){
+  if(busy||!queue.length) return;
+  busy=true; const it=queue[0];
+  try{
+    const q='?k='+encodeURIComponent(KEY)+'&cap='+it.sess+'&part='+it.part+'&kind='+it.kind+'&text='+encodeURIComponent(it.note)+(it.name?'&name='+encodeURIComponent(it.name):'');
+    const res=await fetch(URL_+q,{method:'POST',headers:{'content-type':(it.blob.type||'application/octet-stream').split(';')[0]},body:it.blob});
+    const j=await res.json().catch(()=>({}));
+    if(res.ok&&j.ok){ queue.shift(); savedParts++; }
+    else if(res.status===413){ queue.shift(); alertMsg(it); }
+    else throw new Error(j.error||res.status);
+    busy=false; showQueue(); pump();
+  }catch(e){
+    busy=false; setStatus('No signal? '+pending()+' part(s) waiting. Retrying… keep this page open.');
+    setTimeout(pump,8000);
+  }
+}
+function alertMsg(it){ setStatus('"'+(it.name||'file')+'" is over 45 MB, so it was skipped. Trim it on the phone or send it to Claude another way.'); }
+$('bVideo').onclick=()=>start('video');
+$('bVoice').onclick=()=>start('voice');
+$('bStop').onclick=stop;
+$('bFlip').onclick=async()=>{ facing= facing==='environment'?'user':'environment'; try{ await camera(); setStatus(facing==='user'?'Front camera':'Back camera'); }catch(e){ setStatus('Could not switch camera.'); } };
+$('bPick').onclick=()=>$('pick').click();
+$('pick').onchange=e=>{
+  const files=[...e.target.files]; if(!files.length) return;
+  const s=sid(); let n=0;
+  for(const f of files){
+    if(f.size>45000000){ alertMsg({name:f.name}); continue; }
+    n++; queue.push({blob:f, sess:s, part:n, kind:'upload', note:$('note').value.trim(), name:f.name});
+  }
+  e.target.value=''; showQueue(); pump();
+};
+window.addEventListener('beforeunload',ev=>{ if(pending()){ ev.preventDefault(); ev.returnValue=''; } });
+camera().catch(()=>setStatus('Tap a button and allow the camera and microphone.'));
+</script>
+</body></html>
