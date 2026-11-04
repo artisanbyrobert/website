@@ -61,6 +61,7 @@ input[type=file]{display:none}
     <button class="btn" id="bVoice" type="button">🎙 Voice only</button>
   </div>
   <button class="btn rec" id="bStop" type="button" style="display:none">■ Stop and save</button>
+  <audio id="pb" controls playsinline style="display:none;width:100%"></audio>
   <div class="row" id="after" style="display:none"><button class="btn small" id="bBin" type="button">🗑 Bin that take</button><button class="btn small" id="bAgain" type="button">＋ Another take</button></div>
   <div class="count" id="count" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-size:30vw;font-weight:900;color:#D9A441;pointer-events:none;z-index:9"></div>
   <div class="row">
@@ -78,7 +79,7 @@ try{ if(KEY) localStorage.setItem('cap_k',KEY); else KEY=localStorage.getItem('c
 if(!KEY){ const k=prompt('Paste the access key Claude gave you (one time only):'); if(k){ KEY=k.trim(); try{localStorage.setItem('cap_k',KEY);}catch(e){} } }
 const URL_='https://rgmstzswgosoelvamgds.supabase.co/functions/v1/voice-drop';
 const $=id=>document.getElementById(id), v=$('v');
-let takeNo=0, lastSess='', actx=null, mtimer=null;
+let takeAll=[]; let takeNo=0, lastSess='', actx=null, mtimer=null;
 function meterOn(st){ try{ actx=actx||new (window.AudioContext||window.webkitAudioContext)(); const src=actx.createMediaStreamSource(st); const an=actx.createAnalyser(); an.fftSize=512; src.connect(an); const d=new Uint8Array(an.fftSize); $('meter').style.display='block'; mtimer=setInterval(()=>{ an.getByteTimeDomainData(d); let m=0; for(const x of d) m=Math.max(m,Math.abs(x-128)); $('mlev').style.width=Math.min(100,m*1.6)+'%'; },100); }catch(e){} }
 function meterOff(){ clearInterval(mtimer); $('meter').style.display='none'; }
 let facing='environment', stream=null, rec=null, kind='', sess='', part=0, buf=[], bufBytes=0, t0=0, tick=null, flushT=null, lock=null;
@@ -94,7 +95,7 @@ function pending(){ return queue.length+(busy?1:0); }
 function showQueue(){
   if(rec&&rec.state==='recording') return;
   if(pending()) setStatus('Saving… '+pending()+' part(s) left. Keep this page open.');
-  else if(savedParts) setStatus('Take '+takeNo+' saved ✓. Bin it, or record another take. Keep as many as you like.');
+  else if(savedParts) setStatus('Take '+takeNo+' saved ✓. Play it back: if it sounds echoey or noisy, bin it and try somewhere quieter.');
 }
 async function camera(){
   if(stream) stream.getTracks().forEach(t=>t.stop());
@@ -103,7 +104,7 @@ async function camera(){
 }
 async function start(k){
   if(!KEY){ setStatus('Link is missing its key. Ask Claude for the link again.'); return; }
-  kind=k; $('after').style.display='none';
+  kind=k; $('after').style.display='none'; $('pb').style.display='none';
   try{
     if(k==='video'){ await camera(); $('vo').style.display='none'; }
     else { if(stream) stream.getTracks().forEach(t=>t.stop()); stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:true}}); v.srcObject=null; $('vo').style.display= scriptOn?'none':'flex'; }
@@ -113,7 +114,7 @@ async function start(k){
   const opts=type?{mimeType:type}:{}; if(k==='video') opts.videoBitsPerSecond=6000000; opts.audioBitsPerSecond=128000;
   try{ rec=new MediaRecorder(stream,opts); }catch(e){ rec=new MediaRecorder(stream); }
   sess=sid(); part=0; buf=[]; bufBytes=0;
-  rec.ondataavailable=e=>{ if(e.data&&e.data.size){ buf.push(e.data); bufBytes+=e.data.size; } };
+  takeAll=[]; rec.ondataavailable=e=>{ if(e.data&&e.data.size){ buf.push(e.data); takeAll.push(e.data); bufBytes+=e.data.size; } };
   rec.onstop=()=>{ setTimeout(()=>{ flush(true); },300); };
   rec.start(1000);
   meterOn(stream);
@@ -138,7 +139,7 @@ function done(){
   try{ lock&&lock.release(); }catch(e){} lock=null;
   $('timer').classList.remove('rec'); $('timer').textContent='';
   $('bStop').style.display='none'; $('bVideo').style.display=''; $('bVoice').style.display=''; $('bPick').disabled=false; $('bFlip').disabled=false;
-  $('vo').style.display='none'; meterOff(); lastSess=sess; $('after').style.display='flex';
+  $('vo').style.display='none'; meterOff(); lastSess=sess; $('after').style.display='flex'; try{ const pb=$('pb'); pb.src=URL.createObjectURL(new Blob(takeAll,{type:(rec&&rec.mimeType)||'audio/mp4'})); pb.style.display= kind==='voice'?'block':'none'; }catch(e){}
   if(kind==='voice'&&stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
   showQueue();
 }
