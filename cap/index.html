@@ -27,16 +27,16 @@ video{width:100%;height:100%;object-fit:cover}
 .note::placeholder{color:#ccc}
 .timer{font-size:22px;font-weight:900;text-align:center;min-height:1.2em}
 .timer.rec{color:#ff6b5e}
-.bar{position:fixed;left:0;right:0;bottom:0;padding:14px 16px max(60px,env(safe-area-inset-bottom));background:linear-gradient(transparent,rgba(0,0,0,.88));display:flex;flex-direction:column;gap:10px;align-items:stretch}
+.bar{position:fixed;z-index:8;left:0;right:0;bottom:0;padding:14px 16px max(60px,env(safe-area-inset-bottom));background:linear-gradient(transparent,rgba(0,0,0,.88));display:flex;flex-direction:column;gap:10px;align-items:stretch}
 .row{display:flex;gap:10px}
 .btn{flex:1;font:inherit;font-size:19px;font-weight:900;letter-spacing:.03em;border:3px solid var(--cream);border-radius:18px;background:var(--green);color:#fff;padding:18px 10px;cursor:pointer;text-align:center}
 .btn.rec{background:var(--red)}
 .btn.small{font-size:15px;padding:12px 8px;border-width:2px;background:rgba(0,0,0,.5)}
 .btn:disabled{opacity:.45}
-.status{font-size:16px;font-weight:700;text-align:center;min-height:1.3em}
+.status{font-size:17px;font-weight:800;text-align:center;min-height:1.3em;background:rgba(0,0,0,.75);border-radius:12px;padding:8px 10px}
 .voiceonly{position:fixed;inset:0;display:none;align-items:center;justify-content:center;font-size:26px;font-weight:900;color:#fff;background:#1F3A2B;text-align:center;padding:24px}
 input[type=file]{display:none}
-.scr{position:fixed;left:14px;right:14px;top:150px;background:rgba(0,0,0,.72);border-radius:16px;padding:40px 16px 16px;font-size:clamp(20px,5.6vw,30px);font-weight:800;line-height:1.25;color:#fff;display:none;z-index:5}
+.scr{position:fixed;left:14px;right:14px;top:130px;max-height:calc(100% - 470px);overflow:auto;background:rgba(0,0,0,.72);border-radius:16px;padding:40px 16px 16px;font-size:clamp(20px,5.6vw,30px);font-weight:800;line-height:1.25;color:#fff;display:none;z-index:5}
 .scr div{margin:0 0 14px}
 .scr .x{position:absolute;right:10px;top:6px;font-size:22px;color:#ccc;background:none;border:0;padding:6px}
 .list{position:fixed;inset:0;background:rgba(10,12,10,.96);display:none;flex-direction:column;gap:12px;padding:max(24px,env(safe-area-inset-top)) 16px 40px;z-index:10;overflow:auto}
@@ -98,7 +98,7 @@ async function start(k){
   try{
     if(k==='video'){ await camera(); $('vo').style.display='none'; }
     else { if(stream) stream.getTracks().forEach(t=>t.stop()); stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:true}}); v.srcObject=null; $('vo').style.display= scriptOn?'none':'flex'; }
-  }catch(e){ setStatus('Camera or microphone blocked. Open this link in Safari or Chrome and tap Allow.'); return; }
+  }catch(e){ setStatus('Camera or microphone blocked ('+(e&&e.name||'error')+'). On iPhone: Settings > Apps > Safari > Camera and Microphone > Ask, then reopen Capture and tap Allow.'); return; }
   const type=pickType(k==='video');
   const opts=type?{mimeType:type}:{}; if(k==='video') opts.videoBitsPerSecond=6000000; opts.audioBitsPerSecond=128000;
   try{ rec=new MediaRecorder(stream,opts); }catch(e){ rec=new MediaRecorder(stream); }
