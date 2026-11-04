@@ -51,6 +51,7 @@ input[type=file]{display:none}
 <div class="voiceonly" id="vo">🎙 Recording your voice<br>Keep talking</div>
 <div class="top">
   <input class="note" id="note" placeholder="What is this? (optional, e.g. boning a fallow haunch)">
+  <select id="mic" class="note" style="font-size:15px;padding:8px 10px"><option value="">🎤 Microphone: default</option></select>
   <div class="timer" id="timer"></div>
   <div id="meter" style="height:10px;border-radius:5px;background:rgba(255,255,255,.15);overflow:hidden;display:none"><div id="mlev" style="height:100%;width:0;background:#7fd18b"></div></div>
 </div>
@@ -79,6 +80,8 @@ try{ if(KEY) localStorage.setItem('cap_k',KEY); else KEY=localStorage.getItem('c
 if(!KEY){ const k=prompt('Paste the access key Claude gave you (one time only):'); if(k){ KEY=k.trim(); try{localStorage.setItem('cap_k',KEY);}catch(e){} } }
 const URL_='https://rgmstzswgosoelvamgds.supabase.co/functions/v1/voice-drop';
 const $=id=>document.getElementById(id), v=$('v');
+function micC(){ const id=$('mic').value; const c={echoCancellation:false,noiseSuppression:false,autoGainControl:true}; if(id) c.deviceId={exact:id}; return c; }
+async function listMics(){ try{ const d=(await navigator.mediaDevices.enumerateDevices()).filter(x=>x.kind==='audioinput'); const sel=$('mic'); const cur=sel.value||(localStorage.getItem('cap_mic')||''); sel.innerHTML='<option value="">🎤 Microphone: default</option>'+d.map((x,i)=>'<option value="'+x.deviceId+'">🎤 '+(x.label||('Microphone '+(i+1)))+'</option>').join(''); if(cur) sel.value=cur; }catch(e){} }
 let takeAll=[]; let takeNo=0, lastSess='', actx=null, mtimer=null;
 function meterOn(st){ try{ actx=actx||new (window.AudioContext||window.webkitAudioContext)(); const src=actx.createMediaStreamSource(st); const an=actx.createAnalyser(); an.fftSize=512; src.connect(an); const d=new Uint8Array(an.fftSize); $('meter').style.display='block'; mtimer=setInterval(()=>{ an.getByteTimeDomainData(d); let m=0; for(const x of d) m=Math.max(m,Math.abs(x-128)); $('mlev').style.width=Math.min(100,m*1.6)+'%'; },100); }catch(e){} }
 function meterOff(){ clearInterval(mtimer); $('meter').style.display='none'; }
@@ -99,7 +102,7 @@ function showQueue(){
 }
 async function camera(){
   if(stream) stream.getTracks().forEach(t=>t.stop());
-  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:facing,width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}},audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:true}});
+  stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:facing,width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30}},audio:micC()});
   v.srcObject=stream; v.style.transform= facing==='user'?'scaleX(-1)':'none';
 }
 async function start(k){
@@ -107,7 +110,7 @@ async function start(k){
   kind=k; $('after').style.display='none'; $('pb').style.display='none';
   try{
     if(k==='video'){ await camera(); $('vo').style.display='none'; }
-    else { if(stream) stream.getTracks().forEach(t=>t.stop()); stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:true}}); v.srcObject=null; $('vo').style.display= scriptOn?'none':'flex'; }
+    else { if(stream) stream.getTracks().forEach(t=>t.stop()); stream=await navigator.mediaDevices.getUserMedia({audio:micC()}); v.srcObject=null; $('vo').style.display= scriptOn?'none':'flex'; }
   }catch(e){ const nm=(e&&e.name||'error'); try{ fetch(URL_+'?k='+encodeURIComponent(KEY)+'&diag='+encodeURIComponent(nm+'|'+(e&&e.message||'')+'|standalone='+(navigator.standalone?1:0)+'|'+navigator.userAgent).slice(0,600)); }catch(_){}
       setStatus('Camera or microphone blocked ('+nm+'). Tap "Use iPhone camera" below, or open Capture in Safari.'); $('bNative').style.display=''; return; }
   const type=pickType(k==='video');
@@ -117,7 +120,7 @@ async function start(k){
   takeAll=[]; rec.ondataavailable=e=>{ if(e.data&&e.data.size){ buf.push(e.data); takeAll.push(e.data); bufBytes+=e.data.size; } };
   rec.onstop=()=>{ setTimeout(()=>{ flush(true); },300); };
   rec.start(1000);
-  meterOn(stream);
+  meterOn(stream); listMics();
   for(const n of [3,2,1]){ $('count').textContent=n; await new Promise(r=>setTimeout(r,700)); } $('count').textContent='';
   t0=Date.now(); takeNo++;
   try{ lock=await navigator.wakeLock.request('screen'); }catch(e){}
@@ -206,6 +209,8 @@ $('bScripts').onclick=loadScripts;
 $('listClose').onclick=()=>{$('list').style.display='none';};
 $('scrX').onclick=()=>{$('scr').style.display='none'; scriptOn=false; $('note').value='';};
 window.addEventListener('beforeunload',ev=>{ if(pending()){ ev.preventDefault(); ev.returnValue=''; } });
-camera().catch(()=>setStatus('Tap a button and allow the camera and microphone.'));
+camera().then(listMics).catch(()=>setStatus('Tap a button and allow the camera and microphone.'));
+$('mic').onchange=()=>{ try{localStorage.setItem('cap_mic',$('mic').value);}catch(e){} };
+navigator.mediaDevices&&navigator.mediaDevices.addEventListener&&navigator.mediaDevices.addEventListener('devicechange',listMics);
 </script>
 </body></html>
