@@ -37,10 +37,10 @@ video{width:100%;height:100%;object-fit:cover}
 .voiceonly{position:fixed;inset:0;display:none;align-items:center;justify-content:center;font-size:26px;font-weight:900;color:#fff;background:#1F3A2B;text-align:center;padding:24px}
 input[type=file]{display:none}
 /* v5 */
-.scr{position:fixed;left:14px;right:14px;top:130px;max-height:calc(100% - 470px);overflow:auto;background:rgba(0,0,0,.72);border-radius:16px;padding:40px 16px 16px;font-size:clamp(20px,5.6vw,30px);font-weight:800;line-height:1.25;color:#fff;display:none;z-index:5}
+.scr{position:fixed;left:14px;right:14px;top:92px;bottom:330px;overflow-y:auto;-webkit-overflow-scrolling:touch;touch-action:pan-y;overscroll-behavior:contain;background:rgba(0,0,0,.72);border-radius:16px;padding:40px 16px 16px;font-size:clamp(18px,4.9vw,26px);font-weight:800;line-height:1.25;color:#fff;display:none;z-index:5}
 .scr div{margin:0 0 14px}
 .scr .x{position:absolute;right:10px;top:6px;font-size:22px;color:#ccc;background:none;border:0;padding:6px}
-.list{position:fixed;inset:0;background:rgba(10,12,10,.96);display:none;flex-direction:column;gap:12px;padding:max(24px,env(safe-area-inset-top)) 16px 40px;z-index:10;overflow:auto}
+.list{position:fixed;inset:0;-webkit-overflow-scrolling:touch;touch-action:pan-y;background:rgba(10,12,10,.96);display:none;flex-direction:column;gap:12px;padding:max(24px,env(safe-area-inset-top)) 16px 40px;z-index:10;overflow:auto}
 .list h2{margin:0 0 6px;font-size:22px}
 .list button.item{font:inherit;font-size:19px;font-weight:800;text-align:left;border:2px solid var(--cream);border-radius:14px;background:var(--green);color:#fff;padding:16px}
 .list .sub{font-size:14px;font-weight:600;color:#cfd;opacity:.85;margin-top:4px}
@@ -195,10 +195,12 @@ async function loadScripts(){
 function useScript(x){
   $('list').style.display='none';
   $('scrT').innerHTML=x.lines.map(l=>'<div>'+String(l).replace(/</g,'&lt;')+'</div>').join('');
-  $('scr').style.display='block'; $('note').value=x.title; scriptOn=true;
+  $('scr').style.display='block'; fitScript(); $('note').value=x.title; scriptOn=true;
   setStatus('Script loaded. Tap Voice only or Video + voice, read it your own way, then Stop.');
 }
 let scriptOn=false;
+function fitScript(){ const e=$('scr'); let fs=26; e.style.fontSize=fs+'px'; while(e.scrollHeight>e.clientHeight+1 && fs>13){ fs-=1; e.style.fontSize=fs+'px'; } }
+window.addEventListener('resize',()=>{ if(scriptOn) fitScript(); });
 $('bScripts').onclick=loadScripts;
 $('listClose').onclick=()=>{$('list').style.display='none';};
 $('scrX').onclick=()=>{$('scr').style.display='none'; scriptOn=false; $('note').value='';};
