@@ -209,7 +209,8 @@ $('bScripts').onclick=loadScripts;
 $('listClose').onclick=()=>{$('list').style.display='none';};
 $('scrX').onclick=()=>{$('scr').style.display='none'; scriptOn=false; $('note').value='';};
 window.addEventListener('beforeunload',ev=>{ if(pending()){ ev.preventDefault(); ev.returnValue=''; } });
-camera().then(listMics).catch(()=>setStatus('Tap a button and allow the camera and microphone.'));
+(async()=>{ try{ const t=await navigator.mediaDevices.getUserMedia({audio:true}); t.getTracks().forEach(x=>x.stop()); }catch(e){} await listMics(); camera().catch(()=>{}); })();
+$('mic').onfocus=listMics;
 $('mic').onchange=()=>{ try{localStorage.setItem('cap_mic',$('mic').value);}catch(e){} };
 navigator.mediaDevices&&navigator.mediaDevices.addEventListener&&navigator.mediaDevices.addEventListener('devicechange',listMics);
 </script>
