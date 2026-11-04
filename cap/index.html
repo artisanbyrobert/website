@@ -11,7 +11,6 @@ Scripts button: lists active capture_scripts rows (voice-drop ?scripts=1); choos
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <title>Field capture · Artisan by Robert</title>
-<link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-180.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -70,6 +69,7 @@ input[type=file]{display:none}
 <script>
 let KEY=(new URLSearchParams(location.hash.slice(1))).get('k')||'';
 try{ if(KEY) localStorage.setItem('cap_k',KEY); else KEY=localStorage.getItem('cap_k')||''; }catch(e){}
+if(!KEY){ const k=prompt('Paste the access key Claude gave you (one time only):'); if(k){ KEY=k.trim(); try{localStorage.setItem('cap_k',KEY);}catch(e){} } }
 const URL_='https://rgmstzswgosoelvamgds.supabase.co/functions/v1/voice-drop';
 const $=id=>document.getElementById(id), v=$('v');
 let facing='environment', stream=null, rec=null, kind='', sess='', part=0, buf=[], bufBytes=0, t0=0, tick=null, flushT=null, lock=null;
