@@ -5,7 +5,7 @@ What: Robert records VIDEO + VOICE, or VOICE ONLY, straight from his phone while
       Recording uploads in parts every ~15 s while it records (so a long chat never hits the size limit and little is lost if signal drops).
       Parts go to Supabase function voice-drop v3 (?cap=<session>&part=<n>&kind=video|voice|upload) -> private bucket 'voice' capture/YYYY-MM-DD/<session>-pNNN.<ext>, rows in voice_takes (line_no 300).
       Failed parts stay in memory and retry every 8 s. The screen is kept awake while recording.
-Scripts button: lists active capture_scripts rows (voice-drop ?scripts=1); choosing one shows the lines over the camera and fills the note.\nKey: in the URL hash (#k=...), remembered on the phone so the home-screen app works without it. Max 45 MB per upload (camera-roll files bigger than that are refused with a message).
+After each take: Bin that take (voice-drop ?bin=<session> marks it binned) or Another take; takes numbered in the note. 3-2-1 countdown + mic level bar while recording; 0.9 s tail after Stop.\nScripts button: lists active capture_scripts rows (voice-drop ?scripts=1); choosing one shows the lines over the camera and fills the note.\nKey: in the URL hash (#k=...), remembered on the phone so the home-screen app works without it. Max 45 MB per upload (camera-roll files bigger than that are refused with a message).
 -->
 <html lang="en-GB"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -52,6 +52,7 @@ input[type=file]{display:none}
 <div class="top">
   <input class="note" id="note" placeholder="What is this? (optional, e.g. boning a fallow haunch)">
   <div class="timer" id="timer"></div>
+  <div id="meter" style="height:10px;border-radius:5px;background:rgba(255,255,255,.15);overflow:hidden;display:none"><div id="mlev" style="height:100%;width:0;background:#7fd18b"></div></div>
 </div>
 <div class="bar">
   <div class="status" id="status">Tap a button to start.</div>
@@ -60,6 +61,8 @@ input[type=file]{display:none}
     <button class="btn" id="bVoice" type="button">🎙 Voice only</button>
   </div>
   <button class="btn rec" id="bStop" type="button" style="display:none">■ Stop and save</button>
+  <div class="row" id="after" style="display:none"><button class="btn small" id="bBin" type="button">🗑 Bin that take</button><button class="btn small" id="bAgain" type="button">＋ Another take</button></div>
+  <div class="count" id="count" style="position:fixed;inset:0;display:flex;align-items:center;justify-content:center;font-size:30vw;font-weight:900;color:#D9A441;pointer-events:none;z-index:9"></div>
   <div class="row">
     <button class="btn small" id="bFlip" type="button">↺ Front / back camera</button>
     <button class="btn small" id="bPick" type="button">⬆ Upload</button>
@@ -75,6 +78,9 @@ try{ if(KEY) localStorage.setItem('cap_k',KEY); else KEY=localStorage.getItem('c
 if(!KEY){ const k=prompt('Paste the access key Claude gave you (one time only):'); if(k){ KEY=k.trim(); try{localStorage.setItem('cap_k',KEY);}catch(e){} } }
 const URL_='https://rgmstzswgosoelvamgds.supabase.co/functions/v1/voice-drop';
 const $=id=>document.getElementById(id), v=$('v');
+let takeNo=0, lastSess='', actx=null, mtimer=null;
+function meterOn(st){ try{ actx=actx||new (window.AudioContext||window.webkitAudioContext)(); const src=actx.createMediaStreamSource(st); const an=actx.createAnalyser(); an.fftSize=512; src.connect(an); const d=new Uint8Array(an.fftSize); $('meter').style.display='block'; mtimer=setInterval(()=>{ an.getByteTimeDomainData(d); let m=0; for(const x of d) m=Math.max(m,Math.abs(x-128)); $('mlev').style.width=Math.min(100,m*1.6)+'%'; },100); }catch(e){} }
+function meterOff(){ clearInterval(mtimer); $('meter').style.display='none'; }
 let facing='environment', stream=null, rec=null, kind='', sess='', part=0, buf=[], bufBytes=0, t0=0, tick=null, flushT=null, lock=null;
 const queue=[]; let busy=false, savedParts=0;
 const PART_MS=15000;
@@ -88,7 +94,7 @@ function pending(){ return queue.length+(busy?1:0); }
 function showQueue(){
   if(rec&&rec.state==='recording') return;
   if(pending()) setStatus('Saving… '+pending()+' part(s) left. Keep this page open.');
-  else if(savedParts) setStatus('All saved ✓ ('+savedParts+' part(s)). Record another, or close.');
+  else if(savedParts) setStatus('Take '+takeNo+' saved ✓. Bin it, or record another take. Keep as many as you like.');
 }
 async function camera(){
   if(stream) stream.getTracks().forEach(t=>t.stop());
@@ -97,7 +103,7 @@ async function camera(){
 }
 async function start(k){
   if(!KEY){ setStatus('Link is missing its key. Ask Claude for the link again.'); return; }
-  kind=k;
+  kind=k; $('after').style.display='none';
   try{
     if(k==='video'){ await camera(); $('vo').style.display='none'; }
     else { if(stream) stream.getTracks().forEach(t=>t.stop()); stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:true}}); v.srcObject=null; $('vo').style.display= scriptOn?'none':'flex'; }
@@ -110,18 +116,20 @@ async function start(k){
   rec.ondataavailable=e=>{ if(e.data&&e.data.size){ buf.push(e.data); bufBytes+=e.data.size; } };
   rec.onstop=()=>{ setTimeout(()=>{ flush(true); },300); };
   rec.start(1000);
-  t0=Date.now();
+  meterOn(stream);
+  for(const n of [3,2,1]){ $('count').textContent=n; await new Promise(r=>setTimeout(r,700)); } $('count').textContent='';
+  t0=Date.now(); takeNo++;
   try{ lock=await navigator.wakeLock.request('screen'); }catch(e){}
   $('bVideo').style.display='none'; $('bVoice').style.display='none'; $('bStop').style.display=''; $('bPick').disabled=true; $('bFlip').disabled=true;
   $('timer').classList.add('rec');
-  tick=setInterval(()=>{ const s=Math.floor((Date.now()-t0)/1000); $('timer').textContent='● '+Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); setStatus(savedParts?('Recording… saved '+savedParts+' part(s) so far'):'Recording… talk as long as you like'); },500);
+  tick=setInterval(()=>{ const s=Math.floor((Date.now()-t0)/1000); $('timer').textContent='● '+Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); setStatus('● Recording take '+takeNo+'. Talk now. Green bar should move when you speak.'); },500);
   flushT=setInterval(()=>flush(false),PART_MS);
 }
 function flush(final){
   if(!buf.length) { if(final) done(); return; }
   const type=(rec&&rec.mimeType)||(kind==='video'?'video/mp4':'audio/mp4');
   const blob=new Blob(buf,{type}); buf=[]; bufBytes=0; part++;
-  queue.push({blob, sess, part, kind, note:$('note').value.trim()});
+  queue.push({blob, sess, part, kind, note:($('note').value.trim()+' | take '+takeNo).replace(/^ \| /,'')});
   pump();
   if(final) done();
 }
@@ -130,11 +138,11 @@ function done(){
   try{ lock&&lock.release(); }catch(e){} lock=null;
   $('timer').classList.remove('rec'); $('timer').textContent='';
   $('bStop').style.display='none'; $('bVideo').style.display=''; $('bVoice').style.display=''; $('bPick').disabled=false; $('bFlip').disabled=false;
-  $('vo').style.display='none';
+  $('vo').style.display='none'; meterOff(); lastSess=sess; $('after').style.display='flex';
   if(kind==='voice'&&stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
   showQueue();
 }
-function stop(){ if(rec&&rec.state==='recording'){ rec.requestData(); rec.stop(); } setStatus('Saving…'); }
+function stop(){ $('bStop').disabled=true; setStatus('Finishing…'); setTimeout(()=>{ if(rec&&rec.state==='recording'){ rec.requestData(); rec.stop(); } $('bStop').disabled=false; setStatus('Saving…'); },900); }
 async function pump(){
   if(busy||!queue.length) return;
   busy=true; const it=queue[0];
@@ -152,6 +160,9 @@ async function pump(){
   }
 }
 function alertMsg(it){ setStatus('"'+(it.name||'file')+'" is over 45 MB, so it was skipped. Trim it on the phone or send it to Claude another way.'); }
+
+$('bBin').onclick=async()=>{ if(!lastSess) return; try{ const r=await fetch(URL_+'?k='+encodeURIComponent(KEY)+'&bin='+encodeURIComponent(lastSess)); const j=await r.json(); setStatus(j.ok?('Take '+takeNo+' binned 🗑. Tap a record button for a fresh take.'):'Could not bin it (no signal?).'); if(j.ok){ $('after').style.display='none'; } }catch(e){ setStatus('Could not bin it (no signal?).'); } };
+$('bAgain').onclick=()=>start(kind||'voice');
 $('bVideo').onclick=()=>start('video');
 $('bVoice').onclick=()=>start('voice');
 $('bStop').onclick=stop;
