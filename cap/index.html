@@ -5,12 +5,18 @@ What: Robert records VIDEO + VOICE, or VOICE ONLY, straight from his phone while
       Recording uploads in parts every ~15 s while it records (so a long chat never hits the size limit and little is lost if signal drops).
       Parts go to Supabase function voice-drop v3 (?cap=<session>&part=<n>&kind=video|voice|upload) -> private bucket 'voice' capture/YYYY-MM-DD/<session>-pNNN.<ext>, rows in voice_takes (line_no 300).
       Failed parts stay in memory and retry every 8 s. The screen is kept awake while recording.
-Key: in the URL hash (#k=...). Max 45 MB per upload (camera-roll files bigger than that are refused with a message).
+Key: in the URL hash (#k=...), remembered on the phone so the home-screen app works without it. Max 45 MB per upload (camera-roll files bigger than that are refused with a message).
 -->
 <html lang="en-GB"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="robots" content="noindex, nofollow">
 <title>Field capture · Artisan by Robert</title>
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Capture">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@600;800;900&display=swap" rel="stylesheet">
 <style>
 :root{--green:#1F3A2B;--cream:#F5F1E8;--stone:#ECEBE7;--red:#C0392B;--ink:#2F302C}
@@ -52,7 +58,8 @@ input[type=file]{display:none}
   <input type="file" id="pick" accept="video/*,image/*,audio/*" multiple>
 </div>
 <script>
-const KEY=(new URLSearchParams(location.hash.slice(1))).get('k')||'';
+let KEY=(new URLSearchParams(location.hash.slice(1))).get('k')||'';
+try{ if(KEY) localStorage.setItem('cap_k',KEY); else KEY=localStorage.getItem('cap_k')||''; }catch(e){}
 const URL_='https://rgmstzswgosoelvamgds.supabase.co/functions/v1/voice-drop';
 const $=id=>document.getElementById(id), v=$('v');
 let facing='environment', stream=null, rec=null, kind='', sess='', part=0, buf=[], bufBytes=0, t0=0, tick=null, flushT=null, lock=null;
