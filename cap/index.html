@@ -5,7 +5,7 @@ What: Robert records VIDEO + VOICE, or VOICE ONLY, straight from his phone while
       Recording uploads in parts every ~15 s while it records (so a long chat never hits the size limit and little is lost if signal drops).
       Parts go to Supabase function voice-drop v3 (?cap=<session>&part=<n>&kind=video|voice|upload) -> private bucket 'voice' capture/YYYY-MM-DD/<session>-pNNN.<ext>, rows in voice_takes (line_no 300).
       Failed parts stay in memory and retry every 8 s. The screen is kept awake while recording.
-Key: in the URL hash (#k=...), remembered on the phone so the home-screen app works without it. Max 45 MB per upload (camera-roll files bigger than that are refused with a message).
+Scripts button: lists active capture_scripts rows (voice-drop ?scripts=1); choosing one shows the lines over the camera and fills the note.\nKey: in the URL hash (#k=...), remembered on the phone so the home-screen app works without it. Max 45 MB per upload (camera-roll files bigger than that are refused with a message).
 -->
 <html lang="en-GB"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -37,8 +37,17 @@ video{width:100%;height:100%;object-fit:cover}
 .status{font-size:16px;font-weight:700;text-align:center;min-height:1.3em}
 .voiceonly{position:fixed;inset:0;display:none;align-items:center;justify-content:center;font-size:26px;font-weight:900;color:#fff;background:#1F3A2B;text-align:center;padding:24px}
 input[type=file]{display:none}
+.scr{position:fixed;left:14px;right:14px;top:150px;background:rgba(0,0,0,.72);border-radius:16px;padding:16px;font-size:clamp(20px,5.6vw,30px);font-weight:800;line-height:1.25;color:#fff;display:none;z-index:5}
+.scr div{margin:0 0 14px}
+.scr .x{position:absolute;right:10px;top:6px;font-size:22px;color:#ccc;background:none;border:0;padding:6px}
+.list{position:fixed;inset:0;background:rgba(10,12,10,.96);display:none;flex-direction:column;gap:12px;padding:max(24px,env(safe-area-inset-top)) 16px 40px;z-index:10;overflow:auto}
+.list h2{margin:0 0 6px;font-size:22px}
+.list button.item{font:inherit;font-size:19px;font-weight:800;text-align:left;border:2px solid var(--cream);border-radius:14px;background:var(--green);color:#fff;padding:16px}
+.list .sub{font-size:14px;font-weight:600;color:#cfd;opacity:.85;margin-top:4px}
 </style></head><body>
 <div class="view"><video id="v" playsinline muted autoplay></video></div>
+<div class="scr" id="scr"><button class="x" id="scrX" type="button">✕</button><div id="scrT"></div></div>
+<div class="list" id="list"><h2>Scripts from Claude</h2><div id="items">Loading…</div><button class="btn small" id="listClose" type="button">Close</button></div>
 <div class="voiceonly" id="vo">🎙 Recording your voice<br>Keep talking</div>
 <div class="top">
   <input class="note" id="note" placeholder="What is this? (optional, e.g. boning a fallow haunch)">
@@ -53,7 +62,8 @@ input[type=file]{display:none}
   <button class="btn rec" id="bStop" type="button" style="display:none">■ Stop and save</button>
   <div class="row">
     <button class="btn small" id="bFlip" type="button">↺ Front / back camera</button>
-    <button class="btn small" id="bPick" type="button">⬆ Upload from phone</button>
+    <button class="btn small" id="bPick" type="button">⬆ Upload</button>
+    <button class="btn small" id="bScripts" type="button">📜 Scripts</button>
   </div>
   <input type="file" id="pick" accept="video/*,image/*,audio/*" multiple>
 </div>
@@ -87,7 +97,7 @@ async function start(k){
   kind=k;
   try{
     if(k==='video'){ await camera(); $('vo').style.display='none'; }
-    else { if(stream) stream.getTracks().forEach(t=>t.stop()); stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:true}}); v.srcObject=null; $('vo').style.display='flex'; }
+    else { if(stream) stream.getTracks().forEach(t=>t.stop()); stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:false,noiseSuppression:false,autoGainControl:true}}); v.srcObject=null; $('vo').style.display= scriptOn?'none':'flex'; }
   }catch(e){ setStatus('Camera or microphone blocked. Open this link in Safari or Chrome and tap Allow.'); return; }
   const type=pickType(k==='video');
   const opts=type?{mimeType:type}:{}; if(k==='video') opts.videoBitsPerSecond=6000000; opts.audioBitsPerSecond=128000;
@@ -152,6 +162,29 @@ $('pick').onchange=e=>{
   }
   e.target.value=''; showQueue(); pump();
 };
+
+async function loadScripts(){
+  $('list').style.display='flex'; $('items').textContent='Loading…';
+  try{
+    const r=await fetch(URL_+'?k='+encodeURIComponent(KEY)+'&scripts=1'); const j=await r.json();
+    const sc=(j.scripts||[]);
+    if(!sc.length){ $('items').textContent='No scripts waiting. Ask Claude to send one.'; return; }
+    $('items').innerHTML='';
+    sc.forEach(x=>{ const b=document.createElement('button'); b.className='item'; b.type='button';
+      b.innerHTML=x.title.replace(/</g,'&lt;')+'<div class="sub">'+x.lines.length+' lines · tap to use</div>';
+      b.onclick=()=>useScript(x); $('items').appendChild(b); });
+  }catch(e){ $('items').textContent='Could not load scripts (no signal?).'; }
+}
+function useScript(x){
+  $('list').style.display='none';
+  $('scrT').innerHTML=x.lines.map(l=>'<div>'+String(l).replace(/</g,'&lt;')+'</div>').join('');
+  $('scr').style.display='block'; $('note').value=x.title; scriptOn=true;
+  setStatus('Script loaded. Tap Voice only or Video + voice, read it your own way, then Stop.');
+}
+let scriptOn=false;
+$('bScripts').onclick=loadScripts;
+$('listClose').onclick=()=>{$('list').style.display='none';};
+$('scrX').onclick=()=>{$('scr').style.display='none'; scriptOn=false; $('note').value='';};
 window.addEventListener('beforeunload',ev=>{ if(pending()){ ev.preventDefault(); ev.returnValue=''; } });
 camera().catch(()=>setStatus('Tap a button and allow the camera and microphone.'));
 </script>
